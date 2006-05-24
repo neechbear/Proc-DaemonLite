@@ -1,0 +1,19 @@
+---
+name: Proc-DaemonLite
+version: 1.00
+author: ~
+abstract: ~
+license: open_source
+requires:
+  Carp: 0
+  POSIX: 0
+recommends:
+  Test: 0
+  Test::More: 0
+  Test::Pod: 0
+  Test::Pod::Coverage: 0
+provides:
+  Daemon:
+    file: lib/Proc/DaemonLite.pm
+    version: 1.00
+generated_by: Module::Build version 0.2611
