@@ -1,4 +1,52 @@
+############################################################
+#
+#   $Id: Bot.pm 487 2006-05-22 22:03:16Z nicolaw $
+#   Proc::DaemonLite - 
+#
+#   Copyright 2006 Nicola Worthington
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+############################################################
+
 package Daemon;
+# vim:ts=4:sw=4:tw=78
+
+use strict;
+use Exporter;
+use Carp qw(croak cluck carp);
+use POSIX qw(:signal_h setsid WNOHANG);
+use Carp::Heavy;
+use File::Basename;
+use IO::File;
+use Cwd;
+use Sys::Syslog qw(:DEFAULT setlogsock);
+
+use constant PIDPATH  => '/var/run';
+use constant FACILITY => 'local0';
+
+use vars qw($VERSION $DEBUG @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA %CHILDREN);
+
+$VERSION = '1.00' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
+$DEBUG = $ENV{DEBUG} ? 1 : 0;
+
+@ISA = qw(Exporter);
+@EXPORT_OK = qw(init_server prepare_child kill_children
+  launch_child do_relaunch log_debug log_notice log_warn
+  log_die %CHILDREN);
+@EXPORT = qw(init_server);
+%EXPORT_TAGS = (all => \@EXPORT_OK);
+
 
 # file Daemon.pm
 # Figure 14.7:  Daemon.pm module with support for restarting the server
@@ -6,29 +54,7 @@ package Daemon;
 # NOTE: this is the full-featured version of the Daemon module from the end
 # of chapter 14.  See Daemon1.pm for the simpler version.
 
-use strict;
-use vars qw(@EXPORT @ISA @EXPORT_OK $VERSION);
 
-use POSIX qw(:signal_h setsid WNOHANG);
-use Carp 'croak', 'cluck';
-use Carp::Heavy;
-use File::Basename;
-use IO::File;
-use Cwd;
-use Sys::Syslog qw(:DEFAULT setlogsock);
-require Exporter;
-
-@EXPORT_OK = qw(init_server prepare_child kill_children
-  launch_child do_relaunch
-  log_debug log_notice log_warn
-  log_die %CHILDREN);
-@EXPORT  = @EXPORT_OK;
-@ISA     = qw(Exporter);
-$VERSION = '1.00';
-
-use constant PIDPATH  => '/var/run';
-use constant FACILITY => 'local0';
-use vars qw(%CHILDREN);
 my ($pid, $pidfile, $saved_dir, $CWD);
 
 sub init_server {
@@ -166,5 +192,101 @@ END {
 	unlink $pidfile if defined $pid and $$ == $pid;
 }
 
+sub TRACE {
+	return unless $DEBUG;
+	warn(shift());
+}
+
+sub DUMP {
+	return unless $DEBUG;
+	eval {
+		require Data::Dumper;
+		warn(shift().': '.Data::Dumper::Dumper(shift()));
+	}
+}
+
 1;
+
+=pod
+
+=head1 NAME
+
+Proc::DaemonLite - 
+
+=head1 SYNOPSIS
+
+ use strict;
+ use Proc::DaemonLite qw(:all);
+ 
+=head1 DESCRIPTION
+
+=head1 EXPORTS
+
+=head2 init_server()
+
+=head2 init_server()
+
+=head2 prepare_child()
+
+=head2 kill_children()
+
+=head2 launch_child()
+
+=head2 do_relaunch()
+
+=head2 log_debug()
+
+=head2 log_notice()
+
+=head2 log_warn()
+
+=head2 log_die()
+
+=head2 %CHILDREN
+
+=head1 SEE ALSO
+
+L<Proc::Deamon>, L<Proc::Fork>, L<Proc::Application::Daemon>,
+L<Proc::Forking>, L<Proc::Background>, L<Net::Daemon>,
+L<POE::Component::Daemon>, L<http://www.modperl.com/perl_networking/>,
+L<perlfork>
+
+=head1 VERSION
+
+$Id: Bot.pm 487 2006-05-22 22:03:16Z nicolaw $
+
+=head1 AUTHOR
+
+Nicola Worthington <nicolaw@cpan.org>
+
+L<http://perlgirl.org.uk>
+
+Original code written by Lincoln D. Stein, featured in "Network Programming
+with Perl". L<http://www.modperl.com/perl_networking/>
+
+Released with permission of Lincoln D. Stein.
+
+=head1 COPYRIGHT
+
+Copyright 2006 Nicola Worthington.
+
+This software is licensed under The Apache Software License, Version 2.0.
+
+L<http://www.apache.org/licenses/LICENSE-2.0>
+
+=cut
+
+
 __END__
+
+
+
+
+
+
+
+
+
+
+__END__
+

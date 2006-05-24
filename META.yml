@@ -1,7 +1,8 @@
 ---
 name: Proc-DaemonLite
 version: 1.00
-author: ~
+author:
+  - Nicola Worthington <nicolaw@cpan.org>
 abstract: ~
 license: open_source
 requires:
