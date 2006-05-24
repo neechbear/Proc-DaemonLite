@@ -6,7 +6,7 @@ use Module::Build;
 use vars qw($build);
 
 $build = Module::Build->new(
-		module_name        => 'WWW::WebStore::TinyURL',
+		module_name        => 'Proc::DaemonLite',
 		license            => 'open_source',
 		create_makefile_pl => 'passthrough',
 		create_readme      => 1,
