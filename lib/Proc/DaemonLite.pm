@@ -19,7 +19,7 @@
 #
 ############################################################
 
-package Daemon;
+package Proc::DaemonLite;
 # vim:ts=4:sw=4:tw=78
 
 use strict;
@@ -32,7 +32,7 @@ use IO::File;
 use Cwd qw(getcwd);
 use Sys::Syslog qw(:DEFAULT setlogsock);
 
-use constant PIDPATH  => -d '/var/run' ? '/var/run' : '/var/tmp';
+use constant PIDPATH  => -d '/var/run' && -w _ ? '/var/run' : '/var/tmp';
 use constant FACILITY => 'local0';
 
 use vars qw($VERSION $DEBUG @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA %CHILDREN);
@@ -42,7 +42,7 @@ $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(&init_server &prepare_child &kill_children &launch_child
-		&do_relaunch &log_debug &log_notice &log_warn &log_die %CHILDREN);
+	&do_relaunch &log_debug &log_notice &log_warn &log_die &log_info %CHILDREN);
 @EXPORT = qw(&init_server);
 %EXPORT_TAGS = (all => \@EXPORT_OK);
 
@@ -52,17 +52,17 @@ my ($pid, $pidfile, $saved_dir, $CWD);
 sub init_server {
 	my ($user, $group);
 	($pidfile, $user, $group) = @_;
-	$pidfile ||= getpidfilename();
-	my $fh = open_pid_file($pidfile);
-	become_daemon();
+	$pidfile ||= _getpidfilename();
+	my $fh = _open_pid_file($pidfile);
+	_become_daemon();
 	print $fh $$;
 	close $fh;
-	init_log();
-	change_privileges($user, $group) if defined $user && defined $group;
+	_init_log();
+	_change_privileges($user, $group) if defined $user && defined $group;
 	return $pid = $$;
 }
 
-sub become_daemon {
+sub _become_daemon {
 	croak "Can't fork" unless defined(my $child = fork);
 	exit(0) if $child;   # parent dies;
 	POSIX::setsid();     # become session leader
@@ -74,10 +74,10 @@ sub become_daemon {
 	umask(0);            # forget file mode creation mask
 	$ENV{PATH} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin';
 	delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
-	$SIG{CHLD} = \&reap_child;
+	$SIG{CHLD} = \&_reap_child;
 }
 
-sub change_privileges {
+sub _change_privileges {
 	my ($user, $group) = @_;
 	my $uid = getpwnam($user)  or die "Can't get uid for $user\n";
 	my $gid = getgrnam($group) or die "Can't get gid for $group\n";
@@ -112,7 +112,7 @@ sub prepare_child {
 	$< = $>;                               # set real UID to effective UID
 }
 
-sub reap_child {
+sub _reap_child {
 	while ((my $child = waitpid(-1, WNOHANG)) > 0) {
 		$CHILDREN{$child}->($child) if ref $CHILDREN{$child} eq 'CODE';
 		delete $CHILDREN{$child};
@@ -136,7 +136,7 @@ sub do_relaunch {
 	exec('perl', '-T', $program, $port) or croak "Couldn't exec: $!";
 }
 
-sub init_log {
+sub _init_log {
 	Sys::Syslog::setlogsock('unix');
 	my $basename = File::Basename::basename($0);
 	openlog($basename, 'pid', FACILITY);
@@ -147,6 +147,7 @@ sub init_log {
 sub log_debug  { syslog('debug',   _msg(@_)) }
 sub log_notice { syslog('notice',  _msg(@_)) }
 sub log_warn   { syslog('warning', _msg(@_)) }
+sub log_info   { syslog('info',    _msg(@_)) }
 
 sub log_die {
 	Sys::Syslog::syslog('crit', _msg(@_)) unless $^S;
@@ -160,12 +161,12 @@ sub _msg {
 	$msg;
 }
 
-sub getpidfilename {
+sub _getpidfilename {
 	my $basename = File::Basename::basename($0, '.pl');
 	return PIDPATH . "/$basename.pid";
 }
 
-sub open_pid_file {
+sub _open_pid_file {
 	my $file = shift;
 	if (-e $file) {    # oops.  pid file already exists
 		my $fh = IO::File->new($file) || return;
@@ -237,7 +238,7 @@ in order to reserve the namespace before it becomes unavailable.
 By default only I<init_server()> is exported. The export tag I<all> will export
 the following: I<init_server()>, I<prepare_child()>, I<kill_children()>,
 I<launch_child()>, I<do_relaunch()>, I<log_debug()>, I<log_notice()>,
-I<log_warn()>, I<log_die()> and I<%CHILDREN>.
+I<log_warn()>, I<log_info()>, I<log_die()> and I<%CHILDREN>.
 
 =head2 init_server()
 
@@ -266,6 +267,10 @@ Attempt to start a new incovation of the current script.
 =head2 log_debug()
 
  log_debug(@messages);
+
+=head2 log_info()
+
+ log_info(@messages);
 
 =head2 log_notice()
 

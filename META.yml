@@ -14,7 +14,7 @@ recommends:
   Test::Pod: 0
   Test::Pod::Coverage: 0
 provides:
-  Daemon:
+  Proc::DaemonLite:
     file: lib/Proc/DaemonLite.pm
     version: 0.00_1
 generated_by: Module::Build version 0.2611

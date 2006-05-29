@@ -1,18 +1,20 @@
 #!/home/nicolaw/webroot/perl-5.8.7/bin/perl -w
 
 use strict;
-use Proc::DaemonLite qw(init_server);
+use Proc::DaemonLite qw(:all);
 
 my $pid = init_server();
+log_warn("Forked in to background PID $pid");
+
 for my $cid (1..10) {
 	my $child = launch_child();
 	if ($child == 0) {
-		warn "I am child PID $$" while sleep 1;
+		log_warn("I am child PID $$") while sleep 1;
 	} else {
-		warn "Spawned child number $cid, PID $child";
+		log_warn("Spawned child number $cid, PID $child");
 	}
 }
 
-sleep 3;
+sleep 60;
 kill_children();
 
