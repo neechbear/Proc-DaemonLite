@@ -1,7 +1,7 @@
 ############################################################
 #
 #   $Id: Bot.pm 487 2006-05-22 22:03:16Z nicolaw $
-#   Proc::DaemonLite - 
+#   Proc::DaemonLite - Simple server daemonisation module
 #
 #   Copyright 2006 Nicola Worthington
 #
@@ -26,13 +26,13 @@ use strict;
 use Exporter;
 use Carp qw(croak cluck carp);
 use POSIX qw(:signal_h setsid WNOHANG);
-use Carp::Heavy;
-use File::Basename;
+#use Carp::Heavy; # Is this really needed?
+use File::Basename qw(basename);
 use IO::File;
-use Cwd;
+use Cwd qw(getcwd);
 use Sys::Syslog qw(:DEFAULT setlogsock);
 
-use constant PIDPATH  => '/var/run';
+use constant PIDPATH  => -d '/var/run' ? '/var/run' : '/var/tmp';
 use constant FACILITY => 'local0';
 
 use vars qw($VERSION $DEBUG @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA %CHILDREN);
@@ -41,20 +41,12 @@ $VERSION = '1.00' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
 @ISA = qw(Exporter);
-@EXPORT_OK = qw(init_server prepare_child kill_children
-  launch_child do_relaunch log_debug log_notice log_warn
-  log_die %CHILDREN);
+@EXPORT_OK = qw(init_server prepare_child kill_children launch_child
+		do_relaunch log_debug log_notice log_warn log_die %CHILDREN);
 @EXPORT = qw(init_server);
 %EXPORT_TAGS = (all => \@EXPORT_OK);
 
-
-# file Daemon.pm
-# Figure 14.7:  Daemon.pm module with support for restarting the server
-
-# NOTE: this is the full-featured version of the Daemon module from the end
-# of chapter 14.  See Daemon1.pm for the simpler version.
-
-
+# These are private
 my ($pid, $pidfile, $saved_dir, $CWD);
 
 sub init_server {
@@ -211,7 +203,7 @@ sub DUMP {
 
 =head1 NAME
 
-Proc::DaemonLite - 
+Proc::DaemonLite - Simple server daemonisation module
 
 =head1 SYNOPSIS
 
