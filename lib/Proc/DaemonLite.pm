@@ -41,9 +41,9 @@ $VERSION = '0.00_1' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
 @ISA = qw(Exporter);
-@EXPORT_OK = qw(init_server prepare_child kill_children launch_child
-		do_relaunch log_debug log_notice log_warn log_die %CHILDREN);
-@EXPORT = qw(init_server);
+@EXPORT_OK = qw(&init_server &prepare_child &kill_children &launch_child
+		&do_relaunch &log_debug &log_notice &log_warn &log_die %CHILDREN);
+@EXPORT = qw(&init_server);
 %EXPORT_TAGS = (all => \@EXPORT_OK);
 
 # These are private

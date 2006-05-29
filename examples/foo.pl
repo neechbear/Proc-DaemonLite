@@ -1,9 +1,9 @@
 #!/home/nicolaw/webroot/perl-5.8.7/bin/perl -w
 
 use strict;
-use Proc::DaemonLite qw(:all);
+use Proc::DaemonLite qw(init_server);
 
-my $pid = Proc::DaemonLite::init_server();
+my $pid = init_server();
 for my $cid (1..10) {
 	my $child = launch_child();
 	if ($child == 0) {
