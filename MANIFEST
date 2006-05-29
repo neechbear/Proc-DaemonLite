@@ -1,5 +1,7 @@
 Build.PL
 Changes
+CREDITS
+examples/foo.pl
 INSTALL
 lib/Proc/DaemonLite.pm
 LICENSE

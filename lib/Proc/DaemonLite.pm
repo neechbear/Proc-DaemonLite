@@ -210,31 +210,80 @@ Proc::DaemonLite - Simple server daemonisation module
  use strict;
  use Proc::DaemonLite qw(:all);
  
+ my $pid = init_server();
+ for my $cid (1..10) {
+     my $child = launch_child();
+     if ($child == 0) {
+         warn "I am child PID $$" while sleep 1;
+     } else {
+         warn "Spawned child number $cid, PID $child";
+     }
+ }
+ 
+ sleep 3;
+ kill_children();
+
 =head1 DESCRIPTION
+
+Proc::DaemonLite is a basic server daemonisation module that trys
+to cater for most basic Perl daemon requirements.
+
+The POD for this module is incomplete, as is some of the tidying
+of the code. It is however fully functional. This is a pre-release
+in order to reserve the namespace before it becomes unavailable.
 
 =head1 EXPORTS
 
-=head2 init_server()
+By default only I<init_server()> is exported. The export tag I<all> will export
+the following: I<init_server()>, I<prepare_child()>, I<kill_children()>,
+I<launch_child()>, I<do_relaunch()>, I<log_debug()>, I<log_notice()>,
+I<log_warn()>, I<log_die()> and I<%CHILDREN>.
 
 =head2 init_server()
+
+ my $pid = init_server($pidfile, $user, $group);
 
 =head2 prepare_child()
 
-=head2 kill_children()
+ prepare_child($home);
 
 =head2 launch_child()
 
+ my $child_pid = prepare_child($callback, $home);
+
+=head2 kill_children()
+
+ kill_children();
+
+Terminate all children with a I<TERM> signal.
+
 =head2 do_relaunch()
+
+ do_relaunch()
+
+Attempt to start a new incovation of the current script.
 
 =head2 log_debug()
 
+ log_debug(@messages);
+
 =head2 log_notice()
+
+ log_notice(@messages);
 
 =head2 log_warn()
 
+ log_warn(@messages);
+
 =head2 log_die()
 
+ log_die(@messages);
+
 =head2 %CHILDREN
+
+I<%CHILDREN> is a hash of all child processes keyed by PID. Children
+with registered callbacks will contain a reference to their callback
+in this hash.
 
 =head1 SEE ALSO
 
@@ -272,13 +321,4 @@ L<http://www.apache.org/licenses/LICENSE-2.0>
 __END__
 
 
-
-
-
-
-
-
-
-
-__END__
 
