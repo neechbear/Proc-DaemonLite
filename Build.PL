@@ -16,6 +16,11 @@ $build = Module::Build->new(
 		requires => {
 			'Carp'           => 0, # 1.04
 			'POSIX'          => 0,
+			'IO::File'       => 0,
+			'Sys::Syslog'    => 0,
+			'File::Basename' => 0,
+			'Exporter'       => 0,
+			'Cwd'            => 0,
 		},
 
 		recommends => {

@@ -70,7 +70,7 @@ sub _become_daemon {
 	open(STDOUT, ">/dev/null");
 	open(STDERR, ">&STDOUT");
 	$CWD = Cwd::getcwd;  # remember working directory
-	chdir '/';           # change working directory
+	chdir('/');          # change working directory
 	umask(0);            # forget file mode creation mask
 	$ENV{PATH} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin';
 	delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
@@ -89,9 +89,11 @@ sub _change_privileges {
 sub launch_child {
 	my $callback = shift;
 	my $home     = shift;
+
 	my $signals  = POSIX::SigSet->new(SIGINT, SIGCHLD, SIGTERM, SIGHUP);
 	sigprocmask(SIG_BLOCK, $signals);    # block inconvenient signals
 	log_die("Can't fork: $!") unless defined(my $child = fork());
+
 	if ($child) {
 		$CHILDREN{$child} = $callback || 1;
 	} else {
@@ -99,6 +101,7 @@ sub launch_child {
 		_prepare_child($home);
 	}
 	sigprocmask(SIG_UNBLOCK, $signals);    # unblock signals
+
 	return $child;
 }
 
@@ -131,9 +134,14 @@ sub do_relaunch {
 	chdir $1 if $CWD =~ m!([./a-zA-z0-9_-]+)!;
 	croak "bad program name" unless $0 =~ m!([./a-zA-z0-9_-]+)!;
 	my $program = $1;
-	my $port = $1 if $ARGV[0] =~ /(\d+)/;
 	unlink($pidfile);
-	exec('perl', '-T', $program, $port) or croak "Couldn't exec: $!";
+
+	my @perl = ($^X);
+	push @perl, '-T' if ${^TAINT} eq 1;
+	push @perl, '-t' if ${^TAINT} eq -1;
+	push @perl, '-w' if $^W;
+
+	exec(@perl, $program, @ARGV) or croak "Couldn't exec: $!";
 }
 
 sub _init_log {
@@ -168,6 +176,7 @@ sub _getpidfilename {
 
 sub _open_pid_file {
 	my $file = shift;
+
 	if (-e $file) {    # oops.  pid file already exists
 		my $fh = IO::File->new($file) || return;
 		my $pid = <$fh>;
@@ -176,6 +185,7 @@ sub _open_pid_file {
 		cluck "Removing PID file for defunct server process $pid.\n";
 		croak "Can't unlink PID file $file" unless -w $file && unlink $file;
 	}
+
 	return IO::File->new($file, O_WRONLY | O_CREAT | O_EXCL, 0644)
 		or die "Can't create $file: $!\n";
 }
