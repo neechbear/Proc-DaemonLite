@@ -41,7 +41,7 @@ $VERSION = '0.00_1' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
 @ISA = qw(Exporter);
-@EXPORT_OK = qw(&init_server &prepare_child &kill_children &launch_child
+@EXPORT_OK = qw(&init_server &kill_children &launch_child
 	&do_relaunch &log_debug &log_notice &log_warn &log_die &log_info %CHILDREN);
 @EXPORT = qw(&init_server);
 %EXPORT_TAGS = (all => \@EXPORT_OK);
@@ -96,13 +96,13 @@ sub launch_child {
 		$CHILDREN{$child} = $callback || 1;
 	} else {
 		$SIG{HUP} = $SIG{INT} = $SIG{CHLD} = $SIG{TERM} = 'DEFAULT';
-		prepare_child($home);
+		_prepare_child($home);
 	}
 	sigprocmask(SIG_UNBLOCK, $signals);    # unblock signals
 	return $child;
 }
 
-sub prepare_child {
+sub _prepare_child {
 	my $home = shift;
 	if ($home) {
 		local ($>, $<) = ($<, $>);         # become root again (briefly)
@@ -212,16 +212,22 @@ Proc::DaemonLite - Simple server daemonisation module
  use Proc::DaemonLite qw(:all);
  
  my $pid = init_server();
- for my $cid (1..10) {
+ log_warn("Forked in to background PID $pid");
+ 
+ $SIG{__WARN__} = \&log_warn;
+ $SIG{__DIE__} = \&log_die;
+ 
+ for my $cid (1..4) {
      my $child = launch_child();
      if ($child == 0) {
-         warn "I am child PID $$" while sleep 1;
+         log_warn("I am child PID $$") while sleep 2;
+         exit;
      } else {
-         warn "Spawned child number $cid, PID $child";
+         log_warn("Spawned child number $cid, PID $child");
      }
  }
  
- sleep 3;
+ sleep 20;
  kill_children();
 
 =head1 DESCRIPTION
@@ -236,7 +242,7 @@ in order to reserve the namespace before it becomes unavailable.
 =head1 EXPORTS
 
 By default only I<init_server()> is exported. The export tag I<all> will export
-the following: I<init_server()>, I<prepare_child()>, I<kill_children()>,
+the following: I<init_server()>, I<kill_children()>,
 I<launch_child()>, I<do_relaunch()>, I<log_debug()>, I<log_notice()>,
 I<log_warn()>, I<log_info()>, I<log_die()> and I<%CHILDREN>.
 
@@ -244,13 +250,9 @@ I<log_warn()>, I<log_info()>, I<log_die()> and I<%CHILDREN>.
 
  my $pid = init_server($pidfile, $user, $group);
 
-=head2 prepare_child()
-
- prepare_child($home);
-
 =head2 launch_child()
 
- my $child_pid = prepare_child($callback, $home);
+ my $child_pid = launch_child($callback, $home);
 
 =head2 kill_children()
 
