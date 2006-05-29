@@ -1,13 +1,18 @@
 ---
 name: Proc-DaemonLite
-version: 0.00_1
+version: 0.00_2
 author:
   - Nicola Worthington <nicolaw@cpan.org>
 abstract: Simple server daemonisation module
 license: open_source
 requires:
   Carp: 0
+  Cwd: 0
+  Exporter: 0
+  File::Basename: 0
+  IO::File: 0
   POSIX: 0
+  Sys::Syslog: 0
 recommends:
   Test: 0
   Test::More: 0
@@ -16,5 +21,5 @@ recommends:
 provides:
   Proc::DaemonLite:
     file: lib/Proc/DaemonLite.pm
-    version: 0.00_1
+    version: 0.00_2
 generated_by: Module::Build version 0.2611

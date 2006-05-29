@@ -26,7 +26,6 @@ use strict;
 use Exporter;
 use Carp qw(croak cluck carp);
 use POSIX qw(:signal_h setsid WNOHANG);
-#use Carp::Heavy; # Is this really needed?
 use File::Basename qw(basename);
 use IO::File;
 use Cwd qw(getcwd);
@@ -37,12 +36,12 @@ use constant FACILITY => 'local0';
 
 use vars qw($VERSION $DEBUG @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA %CHILDREN);
 
-$VERSION = '0.00_1' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
+$VERSION = '0.00_2' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
 @ISA = qw(Exporter);
-@EXPORT_OK = qw(&init_server &kill_children &launch_child
-	&do_relaunch &log_debug &log_notice &log_warn &log_die &log_info %CHILDREN);
+@EXPORT_OK = qw(&init_server &kill_children &launch_child &do_relaunch
+		&log_debug &log_notice &log_warn &log_die &log_info %CHILDREN);
 @EXPORT = qw(&init_server);
 %EXPORT_TAGS = (all => \@EXPORT_OK);
 
@@ -50,6 +49,7 @@ $DEBUG = $ENV{DEBUG} ? 1 : 0;
 my ($pid, $pidfile, $saved_dir, $CWD);
 
 sub init_server {
+	TRACE('init_server()');
 	my ($user, $group);
 	($pidfile, $user, $group) = @_;
 	$pidfile ||= _getpidfilename();
@@ -63,6 +63,7 @@ sub init_server {
 }
 
 sub _become_daemon {
+	TRACE('_become_daemon()');
 	croak "Can't fork" unless defined(my $child = fork);
 	exit(0) if $child;   # parent dies;
 	POSIX::setsid();     # become session leader
@@ -78,6 +79,7 @@ sub _become_daemon {
 }
 
 sub _change_privileges {
+	TRACE('_change_privileges()');
 	my ($user, $group) = @_;
 	my $uid = getpwnam($user)  or die "Can't get uid for $user\n";
 	my $gid = getgrnam($group) or die "Can't get gid for $group\n";
@@ -87,6 +89,7 @@ sub _change_privileges {
 }
 
 sub launch_child {
+	TRACE('launch_child()');
 	my $callback = shift;
 	my $home     = shift;
 
@@ -106,6 +109,7 @@ sub launch_child {
 }
 
 sub _prepare_child {
+	TRACE('_prepare_child()');
 	my $home = shift;
 	if ($home) {
 		local ($>, $<) = ($<, $>);         # become root again (briefly)
@@ -116,6 +120,7 @@ sub _prepare_child {
 }
 
 sub _reap_child {
+	TRACE('_reap_child()');
 	while ((my $child = waitpid(-1, WNOHANG)) > 0) {
 		$CHILDREN{$child}->($child) if ref $CHILDREN{$child} eq 'CODE';
 		delete $CHILDREN{$child};
@@ -123,6 +128,8 @@ sub _reap_child {
 }
 
 sub kill_children {
+	TRACE('kill_children()');
+	DUMP('%CHILDREN',\%CHILDREN);
 	kill TERM => keys %CHILDREN;
 
 	# wait until all the children die
@@ -130,6 +137,7 @@ sub kill_children {
 }
 
 sub do_relaunch {
+	TRACE('do_relaunch()');
 	$> = $<;    # regain privileges
 	chdir $1 if $CWD =~ m!([./a-zA-z0-9_-]+)!;
 	croak "bad program name" unless $0 =~ m!([./a-zA-z0-9_-]+)!;
@@ -145,6 +153,7 @@ sub do_relaunch {
 }
 
 sub _init_log {
+	TRACE('_init_log()');
 	Sys::Syslog::setlogsock('unix');
 	my $basename = File::Basename::basename($0);
 	openlog($basename, 'pid', FACILITY);
@@ -152,17 +161,19 @@ sub _init_log {
 	$SIG{__DIE__}  = \&log_die;
 }
 
-sub log_debug  { syslog('debug',   _msg(@_)) }
-sub log_notice { syslog('notice',  _msg(@_)) }
-sub log_warn   { syslog('warning', _msg(@_)) }
-sub log_info   { syslog('info',    _msg(@_)) }
+sub log_debug  { TRACE('log_debug()');  syslog('debug',   _msg(@_)) }
+sub log_notice { TRACE('log_notice()'); syslog('notice',  _msg(@_)) }
+sub log_warn   { TRACE('log_warn()');   syslog('warning', _msg(@_)) }
+sub log_info   { TRACE('log_info()');   syslog('info',    _msg(@_)) }
 
 sub log_die {
+	TRACE('log_die()');
 	Sys::Syslog::syslog('crit', _msg(@_)) unless $^S;
 	die @_;
 }
 
 sub _msg {
+	TRACE('_msg()');
 	my $msg = join('', @_) || "Something's wrong";
 	my ($pack, $filename, $line) = caller(1);
 	$msg .= " at $filename line $line\n" unless $msg =~ /\n$/;
@@ -170,11 +181,13 @@ sub _msg {
 }
 
 sub _getpidfilename {
+	TRACE('_getpidfilename()');
 	my $basename = File::Basename::basename($0, '.pl');
 	return PIDPATH . "/$basename.pid";
 }
 
 sub _open_pid_file {
+	TRACE('_open_pid_file()');
 	my $file = shift;
 
 	if (-e $file) {    # oops.  pid file already exists
@@ -197,6 +210,7 @@ END {
 
 sub TRACE {
 	return unless $DEBUG;
+	log_debug($_[0]);
 	warn(shift());
 }
 
@@ -204,7 +218,9 @@ sub DUMP {
 	return unless $DEBUG;
 	eval {
 		require Data::Dumper;
-		warn(shift().': '.Data::Dumper::Dumper(shift()));
+		my $msg = shift().': '.Data::Dumper::Dumper(shift());
+		log_debug($msg);
+		warn($msg);
 	}
 }
 
