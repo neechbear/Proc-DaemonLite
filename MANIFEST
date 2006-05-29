@@ -13,3 +13,4 @@ t/10pod.t
 t/11pod_coverage.t
 t/20compile.t
 TODO
+README
