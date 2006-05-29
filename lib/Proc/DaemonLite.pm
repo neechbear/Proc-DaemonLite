@@ -1,6 +1,6 @@
 ############################################################
 #
-#   $Id: Bot.pm 487 2006-05-22 22:03:16Z nicolaw $
+#   $Id$
 #   Proc::DaemonLite - Simple server daemonisation module
 #
 #   Copyright 2006 Nicola Worthington
@@ -37,7 +37,7 @@ use constant FACILITY => 'local0';
 
 use vars qw($VERSION $DEBUG @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA %CHILDREN);
 
-$VERSION = '1.00' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
+$VERSION = '0.00_1' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
 @ISA = qw(Exporter);
@@ -64,16 +64,16 @@ sub init_server {
 
 sub become_daemon {
 	croak "Can't fork" unless defined(my $child = fork);
-	exit 0 if $child;    # parent dies;
+	exit(0) if $child;   # parent dies;
 	POSIX::setsid();     # become session leader
 	open(STDIN,  "</dev/null");
 	open(STDOUT, ">/dev/null");
 	open(STDERR, ">&STDOUT");
-	$CWD = getcwd;       # remember working directory
+	$CWD = Cwd::getcwd;  # remember working directory
 	chdir '/';           # change working directory
 	umask(0);            # forget file mode creation mask
 	$ENV{PATH} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin';
-	delete @ENV{'IFS', 'CDPATH', 'ENV', 'BASH_ENV'};
+	delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
 	$SIG{CHLD} = \&reap_child;
 }
 
@@ -106,8 +106,8 @@ sub prepare_child {
 	my $home = shift;
 	if ($home) {
 		local ($>, $<) = ($<, $>);         # become root again (briefly)
-		chdir $home  || croak "chdir(): $!";
-		chroot $home || croak "chroot(): $!";
+		chdir($home)  || croak "chdir(): $!";
+		chroot($home) || croak "chroot(): $!";
 	}
 	$< = $>;                               # set real UID to effective UID
 }
@@ -132,13 +132,13 @@ sub do_relaunch {
 	croak "bad program name" unless $0 =~ m!([./a-zA-z0-9_-]+)!;
 	my $program = $1;
 	my $port = $1 if $ARGV[0] =~ /(\d+)/;
-	unlink $pidfile;
-	exec 'perl', '-T', $program, $port or croak "Couldn't exec: $!";
+	unlink($pidfile);
+	exec('perl', '-T', $program, $port) or croak "Couldn't exec: $!";
 }
 
 sub init_log {
-	setlogsock('unix');
-	my $basename = basename($0);
+	Sys::Syslog::setlogsock('unix');
+	my $basename = File::Basename::basename($0);
 	openlog($basename, 'pid', FACILITY);
 	$SIG{__WARN__} = \&log_warn;
 	$SIG{__DIE__}  = \&log_die;
@@ -149,7 +149,7 @@ sub log_notice { syslog('notice',  _msg(@_)) }
 sub log_warn   { syslog('warning', _msg(@_)) }
 
 sub log_die {
-	syslog('crit', _msg(@_)) unless $^S;
+	Sys::Syslog::syslog('crit', _msg(@_)) unless $^S;
 	die @_;
 }
 
@@ -161,7 +161,7 @@ sub _msg {
 }
 
 sub getpidfilename {
-	my $basename = basename($0, '.pl');
+	my $basename = File::Basename::basename($0, '.pl');
 	return PIDPATH . "/$basename.pid";
 }
 
@@ -176,7 +176,7 @@ sub open_pid_file {
 		croak "Can't unlink PID file $file" unless -w $file && unlink $file;
 	}
 	return IO::File->new($file, O_WRONLY | O_CREAT | O_EXCL, 0644)
-	  or die "Can't create $file: $!\n";
+		or die "Can't create $file: $!\n";
 }
 
 END {
@@ -245,7 +245,7 @@ L<perlfork>
 
 =head1 VERSION
 
-$Id: Bot.pm 487 2006-05-22 22:03:16Z nicolaw $
+$Id$
 
 =head1 AUTHOR
 

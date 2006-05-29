@@ -1,5 +1,5 @@
 # vim:ts=4:sw=4:tw=78
-# $Id: Build.PL 465 2006-05-19 20:55:11Z nicolaw $
+# $Id$
 
 use strict;
 use Module::Build;
