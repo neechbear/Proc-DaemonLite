@@ -34,7 +34,10 @@ use Sys::Syslog qw(:DEFAULT setlogsock);
 use constant PIDPATH  => -d '/var/run' && -w _ ? '/var/run' : '/var/tmp';
 use constant FACILITY => 'local0';
 
-use vars qw($VERSION $DEBUG @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA %CHILDREN);
+use vars qw($VERSION @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA
+			$DEBUG %CHILDREN $SCRIPT);
+
+BEGIN { use vars qw($SCRIPT); $SCRIPT = $0; }
 
 $VERSION = '0.00_2' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
@@ -140,7 +143,7 @@ sub do_relaunch {
 	TRACE('do_relaunch()');
 	$> = $<;    # regain privileges
 	chdir $1 if $CWD =~ m!([./a-zA-z0-9_-]+)!;
-	croak "bad program name" unless $0 =~ m!([./a-zA-z0-9_-]+)!;
+	croak "bad program name" unless $SCRIPT =~ m!([./a-zA-z0-9_-]+)!;
 	my $program = $1;
 	unlink($pidfile);
 
@@ -155,7 +158,7 @@ sub do_relaunch {
 sub _init_log {
 	TRACE('_init_log()');
 	Sys::Syslog::setlogsock('unix');
-	my $basename = File::Basename::basename($0);
+	my $basename = File::Basename::basename($SCRIPT);
 	openlog($basename, 'pid', FACILITY);
 	$SIG{__WARN__} = \&log_warn;
 	$SIG{__DIE__}  = \&log_die;
@@ -182,7 +185,7 @@ sub _msg {
 
 sub _getpidfilename {
 	TRACE('_getpidfilename()');
-	my $basename = File::Basename::basename($0, '.pl');
+	my $basename = File::Basename::basename($SCRIPT, '.pl');
 	return PIDPATH . "/$basename.pid";
 }
 
