@@ -3,7 +3,7 @@
 #   $Id$
 #   Proc::DaemonLite - Simple server daemonisation module
 #
-#   Copyright 2006 Nicola Worthington
+#   Copyright 2006,2007 Nicola Worthington
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ use vars qw($VERSION @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA
 
 BEGIN { use vars qw($SCRIPT); $SCRIPT = $0; }
 
-$VERSION = '0.00_2' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
+$VERSION = '0.01' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
 @ISA = qw(Exporter);
@@ -338,6 +338,11 @@ Nicola Worthington <nicolaw@cpan.org>
 
 L<http://perlgirl.org.uk>
 
+If you like this software, why not show your appreciation by sending the
+author something nice from her
+L<Amazon wishlist|http://www.amazon.co.uk/gp/registry/1VZXC59ESWYK0?sort=priority>? 
+( http://www.amazon.co.uk/gp/registry/1VZXC59ESWYK0?sort=priority )
+
 Original code written by Lincoln D. Stein, featured in "Network Programming
 with Perl". L<http://www.modperl.com/perl_networking/>
 
@@ -345,7 +350,7 @@ Released with permission of Lincoln D. Stein.
 
 =head1 COPYRIGHT
 
-Copyright 2006 Nicola Worthington.
+Copyright 2006,2007 Nicola Worthington.
 
 This software is licensed under The Apache Software License, Version 2.0.
 
