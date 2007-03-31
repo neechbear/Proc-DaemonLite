@@ -23,7 +23,7 @@ package Proc::DaemonLite;
 # vim:ts=4:sw=4:tw=78
 
 use strict;
-use Exporter;
+use 5.6.0;
 use Carp qw(croak cluck carp);
 use POSIX qw(:signal_h setsid WNOHANG);
 use File::Basename qw(basename);
@@ -31,107 +31,116 @@ use IO::File;
 use Cwd qw(getcwd);
 use Sys::Syslog qw(:DEFAULT setlogsock);
 
-use constant PIDPATH  => -d '/var/run' && -w _ ? '/var/run' : '/var/tmp';
+use constant PIDPATH  => -d '/var/run' && -w _ ? '/var/run'
+						: -d '/var/tmp' && -w _ ? '/var/tmp'
+						: '/tmp';
 use constant FACILITY => 'local0';
 
-use vars qw($VERSION @EXPORT @EXPORT_OK %EXPORT_TAGS @ISA
-			$DEBUG %CHILDREN $SCRIPT);
+use vars qw($VERSION $DEBUG %CHILDREN);
+BEGIN {
+	use Cwd qw();
+	use constant CWD => Cwd::cwd();
+	use constant ARGV0 => $0;
+	use constant ARGVN => @ARGV;
+}
 
-BEGIN { use vars qw($SCRIPT); $SCRIPT = $0; }
 
 $VERSION = '0.01' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
-@ISA = qw(Exporter);
-@EXPORT_OK = qw(&init_server &kill_children &launch_child &do_relaunch
-		&log_debug &log_notice &log_warn &log_die &log_info %CHILDREN);
-@EXPORT = qw(&init_server);
-%EXPORT_TAGS = (all => \@EXPORT_OK);
-
 # These are private
-my ($pid, $pidfile, $saved_dir, $CWD);
+my $objstore = {};
+my ($pid, $pidfile, $saved_dir);
+
+
+
+#
+# Public methods
+#
+
+sub new {
+	my ($self,$stor,$opts) = _params(\@_,
+			valid => [qw(chroot pidfile user group syslog)]
+		);
+
+	$stor->{syslog} = 'local0';
+	while (my ($k,$v) = each %{$opts}) {
+		$stor->{$k} = $v;
+	}
+	$stor->{pid} = undef;
+
+	DUMP('$self', $self);
+	DUMP('$stor', $stor);
+	return $self;
+}
+
+sub pid {
+	my ($self,$stor,$opts) = _params(\@_);
+	return $stor->{pid};
+}
+
+sub daemonise { &init_server; }
+sub daemonize { &init_server; }
 
 sub init_server {
-	TRACE('init_server()');
-	my ($user, $group);
-	($pidfile, $user, $group) = @_;
-	$pidfile ||= _getpidfilename();
-	my $fh = _open_pid_file($pidfile);
+	my ($self,$stor,$opts) = _params(\@_,
+			valid => [qw(chroot pidfile user group syslog)]
+		);
+
+	if (defined $stor->{pid}) {
+		log_warn("Cannot daemonise again; already daemonised as PID $stor->{pid}!");
+		return;
+	}
+
+	for (qw(chroot pidfile user group syslog)) {
+		$stor->{$_} = $opts->{$_} if exists $opts->{$_};
+	}
+	$stor->{uid} = getpwnam($stor->{user}) if defined $stor->{user};
+	$stor->{gid} = getgrnam($stor->{group}) if defined $stor->{group};
+	$stor->{pidfile} ||= _getpidfilename();
+	DUMP('$stor', $stor);
+
+	_init_log($stor->{syslog}) if defined $stor->{syslog};
+	my $fh = _open_pid_file($stor->{pidfile});
+
+	_chroot($stor->{'chroot'}) if defined $stor->{'chroot'};
+
 	_become_daemon();
 	print $fh $$;
 	close $fh;
-	_init_log();
-	_change_privileges($user, $group) if defined $user && defined $group;
-	return $pid = $$;
+
+	_change_privileges($stor->{uid}, $stor->{gid})
+		if defined $stor->{uid} && defined $stor->{gid};
+
+	$stor->{pid} = $$;
+	return $stor->{pid};
 }
 
-sub _become_daemon {
-	TRACE('_become_daemon()');
-	croak "Can't fork" unless defined(my $child = fork);
-	exit(0) if $child;   # parent dies;
-	POSIX::setsid();     # become session leader
-	open(STDIN,  "</dev/null");
-	open(STDOUT, ">/dev/null");
-	open(STDERR, ">&STDOUT");
-	$CWD = Cwd::getcwd;  # remember working directory
-	chdir('/');          # change working directory
-	umask(0);            # forget file mode creation mask
-	$ENV{PATH} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin';
-	delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
-	$SIG{CHLD} = \&_reap_child;
-}
-
-sub _change_privileges {
-	TRACE('_change_privileges()');
-	my ($user, $group) = @_;
-	my $uid = getpwnam($user)  or die "Can't get uid for $user\n";
-	my $gid = getgrnam($group) or die "Can't get gid for $group\n";
-	$) = "$gid $gid";
-	$( = $gid;
-	$> = $uid;           # change the effective UID (but not the real UID)
-}
-
+sub spawn_child { &launch_child; };
 sub launch_child {
-	TRACE('launch_child()');
-	my $callback = shift;
-	my $home     = shift;
+	my ($self,$stor,$opts) = _params(\@_,
+			valid => [qw(callback chroot home)],
+		);
+	$opts->{'chroot'} ||= $opts->{home};
 
 	my $signals  = POSIX::SigSet->new(SIGINT, SIGCHLD, SIGTERM, SIGHUP);
 	sigprocmask(SIG_BLOCK, $signals);    # block inconvenient signals
 	log_die("Can't fork: $!") unless defined(my $child = fork());
 
 	if ($child) {
-		$CHILDREN{$child} = $callback || 1;
+		$CHILDREN{$child} = $opts->{callback} || 1;
 	} else {
 		$SIG{HUP} = $SIG{INT} = $SIG{CHLD} = $SIG{TERM} = 'DEFAULT';
-		_prepare_child($home);
+		_chroot($opts->{'chroot'});
 	}
 	sigprocmask(SIG_UNBLOCK, $signals);    # unblock signals
 
 	return $child;
 }
 
-sub _prepare_child {
-	TRACE('_prepare_child()');
-	my $home = shift;
-	if ($home) {
-		local ($>, $<) = ($<, $>);         # become root again (briefly)
-		chdir($home)  || croak "chdir(): $!";
-		chroot($home) || croak "chroot(): $!";
-	}
-	$< = $>;                               # set real UID to effective UID
-}
-
-sub _reap_child {
-	TRACE('_reap_child()');
-	while ((my $child = waitpid(-1, WNOHANG)) > 0) {
-		$CHILDREN{$child}->($child) if ref $CHILDREN{$child} eq 'CODE';
-		delete $CHILDREN{$child};
-	}
-}
-
 sub kill_children {
-	TRACE('kill_children()');
+	my ($self,$stor,$opts) = _params(\@_);
+
 	DUMP('%CHILDREN',\%CHILDREN);
 	kill TERM => keys %CHILDREN;
 
@@ -140,28 +149,14 @@ sub kill_children {
 }
 
 sub do_relaunch {
-	TRACE('do_relaunch()');
+	my ($self,$stor,$opts) = _params(\@_);
+
 	$> = $<;    # regain privileges
-	chdir $1 if $CWD =~ m!([./a-zA-z0-9_-]+)!;
-	croak "bad program name" unless $SCRIPT =~ m!([./a-zA-z0-9_-]+)!;
-	my $program = $1;
 	unlink($pidfile);
 
-	my @perl = ($^X);
-	push @perl, '-T' if ${^TAINT} eq 1;
-	push @perl, '-t' if ${^TAINT} eq -1;
-	push @perl, '-w' if $^W;
-
-	exec(@perl, $program, @ARGV) or croak "Couldn't exec: $!";
-}
-
-sub _init_log {
-	TRACE('_init_log()');
-	Sys::Syslog::setlogsock('unix');
-	my $basename = File::Basename::basename($SCRIPT);
-	openlog($basename, 'pid', FACILITY);
-	$SIG{__WARN__} = \&log_warn;
-	$SIG{__DIE__}  = \&log_die;
+	chdir(CWD) || croak sprintf("Unable to chdir to '%s': %s",CWD,$!);
+	exec(ARGV0,ARGVN) || 
+		croak sprintf("Unable to exec '%s': %s",join("','",ARGV0,ARGVN),$!);
 }
 
 sub log_debug  { TRACE('log_debug()');  syslog('debug',   _msg(@_)) }
@@ -172,7 +167,107 @@ sub log_info   { TRACE('log_info()');   syslog('info',    _msg(@_)) }
 sub log_die {
 	TRACE('log_die()');
 	Sys::Syslog::syslog('crit', _msg(@_)) unless $^S;
-	die @_;
+	croak @_;
+}
+
+
+
+#
+# Private stuff
+#
+
+no warnings 'redefine';
+sub UNIVERSAL::a_sub_not_likely_to_be_here { ref($_[0]) }
+use warnings 'redefine';
+
+sub _blessed ($) {
+	local($@, $SIG{__DIE__}, $SIG{__WARN__});
+	return length(ref($_[0]))
+			? eval { $_[0]->a_sub_not_likely_to_be_here }
+			: undef
+}
+
+sub _refaddr($) {
+	my $pkg = ref($_[0]) or return undef;
+	if (_blessed($_[0])) {
+		bless $_[0], 'Scalar::Util::Fake';
+	} else {
+		$pkg = undef;
+	}
+	"$_[0]" =~ /0x(\w+)/;
+	my $i = do { local $^W; hex $1 };
+	bless $_[0], $pkg if defined $pkg;
+	return $i;
+}
+
+sub _params {
+	local $Carp::CarpLevel = 2;
+
+	my $self = shift(@{$_[0]});
+	if (!ref($self) && (caller(1))[3] =~ /::new$/) {
+		TRACE("Creating new $self object ...");
+		# ref(my $class = shift) && croak 'Class name required';
+		$self = bless \(my $dummy), $self;
+		$objstore->{_refaddr($self)} = {};
+	}
+
+	croak 'Not called as a method' if !ref($self) || !UNIVERSAL::isa($self,__PACKAGE__);
+
+	my $stor = $objstore->{_refaddr($self)};
+	return ($self,$stor,$_[0]) unless @_ > 1;
+
+	my %param;
+	for (my $i = 1; $i < @_; $i += 2) {
+		if (grep($_ eq $_[$i],qw(required valid)) && ref($_[$i+1]) eq 'ARRAY') {
+			$param{$_[$i]} = $_[$i+1];
+		} else {
+			local $Carp::CarpLevel = 1;
+			confess(sprintf(
+				"Illegal key '%s' or value ref type '%s' passed to _params()",
+				$_[$i], ref($_[$i+1])
+			));
+		}
+	}
+
+	my $opts = {};
+	croak 'Odd number of elements passed when even was expected' if @{$_[0]} % 2;
+	for (my $i = 0; $i < @{$_[0]}; $i += 2) {
+		$opts->{$_[0]->[$i]} = $_[0]->[$i+1] if defined $param{valid}
+			? grep($_[0]->[$i] eq $_,(@{$param{valid}},@{$param{required}})) ||
+				( carp("Illegal parameter '$_[0]->[$i]' passed"), 0 )
+			: 1
+	}
+
+	for my $key (@{$param{required}}) {
+		croak "Required parameter '$key' missing when expected"
+			unless exists $opts->{$key};
+	}
+
+	return ($self,$stor,$opts);
+}
+
+sub _init_log {
+	TRACE('_init_log()');
+	Sys::Syslog::setlogsock('unix');
+	my $basename = File::Basename::basename(ARGV0);
+	openlog($basename, 'pid', FACILITY);
+	$SIG{__WARN__} = \&log_warn;
+	$SIG{__DIE__}  = \&log_die;
+}
+
+sub _become_daemon {
+	TRACE('_become_daemon()');
+	croak "Can't fork" unless defined(my $child = fork);
+	exit(0) if $child;   # parent dies;
+	POSIX::setsid();     # become session leader
+	open(STDIN,  "</dev/null");
+	open(STDOUT, ">/dev/null");
+	open(STDERR, ">&STDOUT");
+	chdir('/');          # change working directory
+	umask(0);            # forget file mode creation mask
+	$ENV{PATH} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin';
+	delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
+	$SIG{CHLD} = \&_reap_child;
 }
 
 sub _msg {
@@ -185,13 +280,13 @@ sub _msg {
 
 sub _getpidfilename {
 	TRACE('_getpidfilename()');
-	my $basename = File::Basename::basename($SCRIPT, '.pl');
+	my $basename = File::Basename::basename(ARGV0, '.pl');
 	return PIDPATH . "/$basename.pid";
 }
 
 sub _open_pid_file {
 	TRACE('_open_pid_file()');
-	my $file = shift;
+	my ($file) = $_[0] =~ /([^`]+)/;
 
 	if (-e $file) {    # oops.  pid file already exists
 		my $fh = IO::File->new($file) || return;
@@ -206,6 +301,45 @@ sub _open_pid_file {
 		or die "Can't create $file: $!\n";
 }
 
+sub _change_privileges {
+	TRACE('_change_privileges()');
+	my ($uid, $gid) = @_;
+	$) = "$gid $gid";
+	$( = $gid;
+	$> = $uid;           # change the effective UID (but not the real UID)
+}
+
+sub _chroot {
+	TRACE('_chroot()');
+	my $dir = shift;
+	if ($dir) {
+		local ($>, $<) = ($<, $>);         # become root again (briefly)
+		chdir($dir)  || croak "chdir(): $!";
+		chroot($dir) || croak "chroot(): $!";
+		chdir('/')   || croak "chdir(): $!";
+	}
+	$< = $>;                               # set real UID to effective UID
+}
+
+sub _reap_child {
+	TRACE('_reap_child()');
+	while ((my $child = waitpid(-1, WNOHANG)) > 0) {
+		$CHILDREN{$child}->($child) if ref $CHILDREN{$child} eq 'CODE';
+		delete $CHILDREN{$child};
+	}
+}
+
+
+
+#
+# Speshul stuff
+#
+
+sub DESTROY {
+	my $self = shift;
+	delete $objstore->{_refaddr($self)};
+}
+
 END {
 	$> = $<;    # regain privileges
 	unlink $pidfile if defined $pid and $$ == $pid;
@@ -213,8 +347,7 @@ END {
 
 sub TRACE {
 	return unless $DEBUG;
-	log_debug($_[0]);
-	warn(shift());
+	carp(shift());
 }
 
 sub DUMP {
@@ -222,8 +355,7 @@ sub DUMP {
 	eval {
 		require Data::Dumper;
 		my $msg = shift().': '.Data::Dumper::Dumper(shift());
-		log_debug($msg);
-		warn($msg);
+		carp($msg);
 	}
 }
 
@@ -238,16 +370,23 @@ Proc::DaemonLite - Simple server daemonisation module
 =head1 SYNOPSIS
 
  use strict;
- use Proc::DaemonLite qw(:all);
+ use Proc::DaemonLite qw();
  
- my $pid = init_server();
+ my $daemon = Proc::DaemonLite->new(
+                     syslog => "local7",
+                     user => "joeb",
+                     group => "staff",
+                     chroot => "/home/jail",
+                     pidfile => "/var/run/my.pid",
+                 );
+ my $pid = $daemon->daemonise;
  log_warn("Forked in to background PID $pid");
  
  $SIG{__WARN__} = \&log_warn;
  $SIG{__DIE__} = \&log_die;
  
  for my $cid (1..4) {
-     my $child = launch_child();
+     my $child = $daemon->spawn_child;
      if ($child == 0) {
          log_warn("I am child PID $$") while sleep 2;
          exit;
@@ -257,31 +396,42 @@ Proc::DaemonLite - Simple server daemonisation module
  }
  
  sleep 20;
- kill_children();
+ $daemon->kill_children;
 
 =head1 DESCRIPTION
 
 Proc::DaemonLite is a basic server daemonisation module that trys
 to cater for most basic Perl daemon requirements.
 
-The POD for this module is incomplete, as is some of the tidying
-of the code. It is however fully functional. This is a pre-release
-in order to reserve the namespace before it becomes unavailable.
+=head1 METHODS
 
-=head1 EXPORTS
+=head2 new()
 
-By default only I<init_server()> is exported. The export tag I<all> will export
-the following: I<init_server()>, I<kill_children()>,
-I<launch_child()>, I<do_relaunch()>, I<log_debug()>, I<log_notice()>,
-I<log_warn()>, I<log_info()>, I<log_die()> and I<%CHILDREN>.
+ my $daemon = new Proc::DaemonLite;
 
 =head2 init_server()
 
  my $pid = init_server($pidfile, $user, $group);
 
+=head2 daemonise()
+
+Alias for init_server().
+
+=head2 daemonize()
+
+Alias for init_server().
+
+=head2 pid()
+
+ my $pid = $daemon->pid;
+
 =head2 launch_child()
 
  my $child_pid = launch_child($callback, $home);
+
+=head2 spawn_child()
+
+Alias for launch_child().
 
 =head2 kill_children()
 
