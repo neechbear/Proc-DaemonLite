@@ -45,7 +45,7 @@ BEGIN {
 }
 
 
-$VERSION = '0.01' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
+$VERSION = '0.02' || sprintf('%d', q$Revision$ =~ /(\d+)/g);
 $DEBUG = $ENV{DEBUG} ? 1 : 0;
 
 # These are private
@@ -100,7 +100,7 @@ sub init_server {
 	$stor->{pidfile} ||= _getpidfilename();
 	DUMP('$stor', $stor);
 
-	_init_log($stor->{syslog}) if defined $stor->{syslog};
+	$self->_init_log($stor->{syslog}) if defined $stor->{syslog};
 	my $fh = _open_pid_file($stor->{pidfile});
 
 	_chroot($stor->{'chroot'}) if defined $stor->{'chroot'};
@@ -159,10 +159,10 @@ sub do_relaunch {
 		croak sprintf("Unable to exec '%s': %s",join("','",ARGV0,ARGVN),$!);
 }
 
-sub log_debug  { TRACE('log_debug()');  syslog('debug',   _msg(@_)) }
-sub log_notice { TRACE('log_notice()'); syslog('notice',  _msg(@_)) }
-sub log_warn   { TRACE('log_warn()');   syslog('warning', _msg(@_)) }
-sub log_info   { TRACE('log_info()');   syslog('info',    _msg(@_)) }
+sub log_debug  { shift; TRACE('log_debug()');  syslog('debug',   _msg(@_)) }
+sub log_notice { shift; TRACE('log_notice()'); syslog('notice',  _msg(@_)) }
+sub log_warn   { shift; TRACE('log_warn()');   syslog('warning', _msg(@_)) }
+sub log_info   { shift; TRACE('log_info()');   syslog('info',    _msg(@_)) }
 
 sub log_die {
 	TRACE('log_die()');
@@ -247,12 +247,13 @@ sub _params {
 }
 
 sub _init_log {
-	TRACE('_init_log()');
+	my $self = shift;
+
 	Sys::Syslog::setlogsock('unix');
 	my $basename = File::Basename::basename(ARGV0);
 	openlog($basename, 'pid', FACILITY);
-	$SIG{__WARN__} = \&log_warn;
-	$SIG{__DIE__}  = \&log_die;
+	$SIG{__WARN__} = sub { $self->log_warn(@_); };
+	$SIG{__DIE__}  = sub { $self->log_die(@_); };
 }
 
 sub _become_daemon {
@@ -260,9 +261,9 @@ sub _become_daemon {
 	croak "Can't fork" unless defined(my $child = fork);
 	exit(0) if $child;   # parent dies;
 	POSIX::setsid();     # become session leader
-	open(STDIN,  "</dev/null");
-	open(STDOUT, ">/dev/null");
-	open(STDERR, ">&STDOUT");
+	open(STDIN,  '</dev/null');
+	open(STDOUT, '>/dev/null');
+	open(STDERR, '>&STDOUT');
 	chdir('/');          # change working directory
 	umask(0);            # forget file mode creation mask
 	$ENV{PATH} = '/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin';
@@ -311,7 +312,7 @@ sub _change_privileges {
 
 sub _chroot {
 	TRACE('_chroot()');
-	my $dir = shift;
+	my ($dir) = $_ =~ /([^`]+)/;
 	if ($dir) {
 		local ($>, $<) = ($<, $>);         # become root again (briefly)
 		chdir($dir)  || croak "chdir(): $!";

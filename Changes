@@ -1,6 +1,22 @@
+Version 0.02 - Sunday 1st April 2007
+    + Changed to OO interface.
+
+    + Added chroot functionality on master parent process.
+      
+    + Added aliases for various methods.
+
+    + Changed storage of initial cwd and script filename to
+      constants in a begin block to make safe from
+      modifications.
+
+    + Disallowed daemonisation of the master process more
+      than once.
+
+
 Version 0.01 - Sunday 11th February 2007
-	+ Nothing much changed
+    + Nothing much changed.
+
 
 Version 0.00_1 - Monday 29th May 2006
-	+ Pre-release
+    + Pre-release.
 
